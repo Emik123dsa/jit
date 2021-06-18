@@ -1,0 +1,8 @@
+FROM redis:6.2.4-alpine AS REDIS-ALPINE
+
+# ADD ./docker/${REDIS_ENV}/redis/conf/redis.conf /usr/local/etc/redis/redis.conf
+
+EXPOSE 6379
+STOPSIGNAL SIGTERM
+
+CMD ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]

@@ -1,0 +1,15 @@
+version: "3.7"
+services:
+  vsemedu:
+    image: vsemedu/back-vsem-edu-docker:php-fpm
+    environment:
+      SERVICE_NAME: vsem-edu-service-container
+      SERVICE_TAGS: prod
+  nginx:
+    image: vsemedu/back-vsem-edu-docker:nginx
+  db:
+    # image: vsemedu/back-vsem-edu-docker:mysql
+    image: mysql:5.6
+  adminer:
+    # image: vsemedu/back-vsem-edu-docker:adminer
+    image: adminer

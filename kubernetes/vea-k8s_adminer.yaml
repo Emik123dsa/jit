@@ -1,0 +1,67 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: vea-k8s-namespace
+  name: vea-k8s-adminer-service
+  labels:
+    app: adminer
+spec:
+  selector:
+    app: adminer
+  type: LoadBalancer
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: vea-k8s-namespace
+  name: vea-k8s-adminer-deployment
+  labels:
+    app: adminer
+spec:
+  replicas: 1
+  minReadySeconds: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: adminer
+  template:
+    metadata:
+      labels:
+        app: adminer
+    spec:
+      restartPolicy: Always
+      volumes:
+        - name: vea-k8s-adminer-local
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+      containers:
+        - name: adminer
+          image: adminer:latest
+          tty: true
+          terminationMessagePolicy: File
+          terminationMessagePath: /dev/termination-log
+          volumeMounts:
+            - mountPath: /var/lib/adminer
+              name: vea-k8s-adminer-local
+          ports:
+            - containerPort: 8080
+              name: "adminer"
+          resources:
+            limits:
+              memory: 32Mi
+              cpu: 200m
+            requests:
+              memory: 16Mi
+              cpu: 50m
+status: {}
+---
+

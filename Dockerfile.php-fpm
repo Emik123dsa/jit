@@ -1,0 +1,165 @@
+FROM php:7.0-fpm as PHP-FPM-BUILD
+
+LABEL maintainer="VEA-PHP-FPM"
+
+USER root
+
+ENV PHING_INSTALLER "https://www.phing.info/get/phing-latest.phar"
+ENV COMPOSER_INSTALLER "https://getcomposer.org/installer"
+ENV PHPUNIT_INSTALLER "https://phar.phpunit.de/phpunit.phar"
+ENV PICKLE_INSTALLER "https://github.com/FriendsOfPHP/pickle/releases/download/v0.6.0/pickle.phar"
+
+ENV YII_ENV "dev"
+
+ADD ${PHING_INSTALLER} /usr/local/bin/phing/
+RUN chmod +x /usr/local/bin/phing && \
+    chown -R www-data:www-data /usr/local/bin/phing
+
+RUN curl -sS ${COMPOSER_INSTALLER} | php && \
+    mv composer.phar /usr/local/bin/composer && \
+    chmod a+rwx /usr/local/bin/composer && \
+    chown -R www-data:www-data /usr/local/bin/composer
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update -qy && \
+    apt-get upgrade -qy && \
+    apt-get install -qy \
+    wget \
+    git \
+    zip \
+    locales \
+    libicu-dev \
+    zlib1g-dev \
+    libghc-postgresql-libpq-dev \
+    libcurl4-openssl-dev \ 
+    vim \ 
+    netcat \
+    python-setuptools \
+    libonig-dev \
+    libpq-dev \
+    libzip-dev \
+    autoconf \
+	build-essential \
+	libssl-dev \
+	libxml2-dev \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libmemcached-dev \
+    libsodium-dev \
+    zlib1g-dev \
+    libevent-dev && \
+    apt-get autoremove --purge -qy && \
+    apt-get clean all -y
+
+# Enable localization;
+RUN locale-gen C.UTF-8 && \
+    /usr/sbin/update-locale LANG=C.UTF-8
+
+RUN docker-php-ext-install zip pcntl
+
+RUN pecl channel-update pecl.php.net
+
+# Enable xedbug for development in the real time;
+RUN pecl install xdebug-2.9.0 && \
+    docker-php-ext-enable xdebug
+
+# Installing igbinary;
+RUN pecl install -of igbinary && \
+    docker-php-ext-enable igbinary
+
+# Installing msgpack instead of default serailiazer;
+RUN pecl install -of msgpack && \
+    docker-php-ext-enable msgpack
+
+# Installing lzf;
+RUN pecl install -of lzf && \
+    docker-php-ext-enable lzf
+
+# installing memcached;
+RUN pecl install memcached
+
+# Installing redis;
+RUN mkdir -p /usr/src/php/ext/ && \
+    cd /usr/src/php/ext/  && \
+    pecl bundle redis && \
+    docker-php-ext-configure redis \
+    --enable-redis-igbinary \
+    --enable-redis-msgpack \
+    --enable-redis-lzf && \
+    docker-php-ext-install -j$(nproc) redis && \
+    cd ~
+
+RUN pecl install apcu && \
+    docker-php-ext-enable apcu
+
+RUN docker-php-ext-configure gd --with-gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ --with-png-dir=/usr/include/
+RUN docker-php-ext-install -j$(nproc) gd
+
+RUN docker-php-ext-configure pgsql --with-pgsql=/usr/include/postgresql/
+RUN docker-php-ext-install -j$(nproc) pgsql
+
+RUN curl -sS ${PHPUNIT_INSTALLER} -o /usr/local/bin/phpunit && \
+    chmod a+x /usr/local/bin/phpunit && \
+    chown -R www-data:www-data /usr/local/bin/phpunit
+
+RUN curl -L -o /usr/local/bin/pickle ${PICKLE_INSTALLER} && \
+    chmod a+x /usr/local/bin/pickle && \
+    chown www-data:www-data /usr/local/bin/pickle
+
+# Disable memory limit;
+RUN echo "memory_limit=-1" >> /usr/local/etc/php/php.ini
+
+# Enable expanded pool factory;
+# In the development we can use currently upgraded pool config as the output;
+RUN echo "pm.max_children=25" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.start_servers=5" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.min_spare_servers=5" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.max_spare_servers=25" | tee -a /usr/local/etc/php-fpm.d/www.conf
+
+# Install dependencies;
+RUN docker-php-ext-install -j$(nproc) sockets \
+    intl \
+    mysqli \
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
+    shmop \
+    bcmath \
+    opcache \
+    curl
+
+# Enable required extensions;
+RUN docker-php-ext-enable \
+    opcache \
+    memcached
+
+ENV COMPOSER_ALLOW_SUPERUSER "1"
+ENV COMPOSER_HOME "/usr/local/bin/composer/"
+ENV COMPOSER_VERSION "2.0.12"
+
+# Set user environment;
+RUN usermod --non-unique --uid 1000 www-data
+RUN rm -rf /var/www/html/*
+RUN usermod -s /bin/bash www-data
+
+ADD --chown=www-data:www-data . /var/www/
+
+# Debug logger file;
+RUN touch /var/www/tmp/xdebug.log && \
+    chmod a+rwx /var/www/tmp/xdebug.log
+
+RUN chown -R www-data:www-data /var/www/
+
+RUN chmod a+rwx /var/www/tmp/xdebug.log && \
+    chmod a+x /var/www/
+
+WORKDIR /var/www/
+
+USER www-data
+
+STOPSIGNAL SIGTERM
+EXPOSE 9000/tcp
+
+ENTRYPOINT ["php-fpm"]

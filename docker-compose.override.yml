@@ -1,0 +1,19 @@
+version: "3.7"
+services:
+  php-fpm:
+    image: vea/php-fpm
+    build:
+      context: .
+      dockerfile: Dockerfile.php-fpm
+    environment:
+      SERVICE_NAME: php-fpm
+      SERVICE_TAGS: dev
+  nginx:
+    image: vea/nginx
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+  mysql:
+    image: mysql:5.6
+  adminer:
+    image: adminer

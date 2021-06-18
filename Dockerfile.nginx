@@ -1,0 +1,28 @@
+FROM nginx:latest as NGINX-BUILD
+
+LABEL maintainer="VEA-NGINX"
+
+ENV NGINX_ENV "dev"
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update -qy && \
+    apt-get upgrade -qy && \
+    apt-get update -qy && \
+    apt-get install -qy \
+    vim && \
+    apt-get autoremove --purge -y && \
+    apt-get clean all -y
+
+RUN rm -rf /etc/nginx/conf.d/*.conf
+
+ADD ./docker/dev/web/templates/*.conf /etc/nginx/templates/
+
+ADD ./docker/dev/web/default.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80/tcp
+EXPOSE 443/tcp
+
+STOPSIGNAL SIGTERM
+
+CMD ["nginx", "-g", "daemon off;"]

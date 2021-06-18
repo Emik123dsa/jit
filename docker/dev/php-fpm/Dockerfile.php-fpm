@@ -1,0 +1,130 @@
+FROM php:7.0-fpm as PHP-FPM-BUILD
+
+LABEL maintainer="vsem-edu-fpm"
+
+USER root
+
+ENV PHING_INSTALLER "https://www.phing.info/get/phing-latest.phar"
+ENV COMPOSER_INSTALLER "https://getcomposer.org/installer"
+ENV PHPUNIT_INSTALLER "https://phar.phpunit.de/phpunit.phar"
+ENV PICKLE_INSTALLER "https://github.com/FriendsOfPHP/pickle/releases/download/v0.6.0/pickle.phar"
+
+ENV YII_ENV "development"
+
+ADD ${PHING_INSTALLER} /usr/local/bin/phing
+RUN chmod +x /usr/local/bin/phing && \
+    chown -R www-data:www-data /usr/local/bin/phing
+
+RUN curl -sS ${COMPOSER_INSTALLER} | php && \
+    mv composer.phar /usr/local/bin/composer && \
+    chmod a+rwx /usr/local/bin/composer && \
+    chown -R www-data:www-data /usr/local/bin/composer
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update -y && \
+    apt-get upgrade && \
+    apt-get autoremove --purge -y && \
+    apt-get install -y \
+    wget \
+    git \
+    zip \
+    libonig-dev \
+    libpq-dev \
+    libzip-dev \
+    autoconf \
+	build-essential \
+	libssl-dev \
+	libxml2-dev \
+	wget \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libmemcached-dev \
+    libsodium-dev \
+    zlib1g-dev \
+    libevent-dev && \
+    apt-get clean all -y
+
+RUN docker-php-ext-install zip pcntl
+
+# Enable xedbug for development in the real time;
+RUN pecl install xdebug
+RUN docker-php-ext-enable xdebug
+
+RUN pecl install apcu && \
+    docker-php-ext-enable apcu
+
+RUN docker-php-ext-configure gd --with-gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ --with-png-dir=/usr/include/
+RUN docker-php-ext-install -j$(nproc) gd
+
+RUN docker-php-ext-configure pgsql --with-pgsql=/usr/include/postgresql/
+RUN docker-php-ext-install -j$(nproc) pgsql
+
+RUN curl -sS ${PHPUNIT_INSTALLER} -o /usr/local/bin/phpunit && \
+    chmod a+x /usr/local/bin/phpunit && \
+    chown -R www-data:www-data /usr/local/bin/phpunit
+
+RUN curl -L -o /usr/local/bin/pickle ${PICKLE_INSTALLER} && \
+    chmod a+x /usr/local/bin/pickle && \
+    chown www-data:www-data /usr/local/bin/pickle
+
+# Disable memory limit;
+RUN echo "memory_limit=-1" >> /usr/local/etc/php/php.ini
+
+# Enable expanded pool factory;
+# In the development we can use currently upgraded pool config as the output;
+RUN echo "memory_limit=-1" | tee -a /usr/local/etc/php/php.ini
+RUN echo "pm.max_children=25" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.start_servers=5" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.min_spare_servers=5" | tee -a /usr/local/etc/php-fpm.d/www.conf
+RUN echo "pm.max_spare_servers=25" | tee -a /usr/local/etc/php-fpm.d/www.conf
+
+# Install dependencies;
+RUN docker-php-ext-install -j$(nproc) sockets \
+    intl \
+    mbstring \
+    mysqli \
+    pdo \
+    pdo_mysql \
+    pdo_pgsql \
+    shmop \
+    bcmath \
+    sodium \
+    opcache \ 
+    redis \
+    memcached
+
+RUN docker-php-ext-enable apcu \
+    curl \
+    gd \
+    memcached \
+    redis \
+    opcache
+
+ENV COMPOSER_ALLOW_SUPERUSER "1"
+ENV COMPOSER_HOME "/usr/local/bin/composer/"
+ENV COMPOSER_VERSION "2.0.12"
+
+# Manipulations with user environment;
+RUN groupadd -g 1000 www-data
+RUN useradd -u 1000 -ms /bin/bash -g www-data www-data
+
+ADD --chown=www-data:www-data . /var/www/
+
+RUN touch /var/www/tmp/xdebug.ini && \
+    chmod a+rwx /var/www/tmp/xdebug.log
+
+RUN chown -R www-data:www-data /var/www/
+
+RUN chmod a+rwx /var/www/tmp/xdebug.log && \
+    chmod a+x /var/www/
+
+WORKDIR /var/www/
+
+USER www-data
+
+STOPSIGNAL SIGTERM
+EXPOSE 9000/tcp
+
+ENTRYPOINT ["php-fpm"]

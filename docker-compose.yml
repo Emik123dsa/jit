@@ -1,0 +1,168 @@
+version: "3.8"
+
+services:
+  php-fpm:
+    container_name: vea-php-fpm
+    restart: unless-stopped
+    tty: true
+    working_dir: /var/www/
+    volumes:
+      - type: bind
+        source: .
+        target: /var/www/
+        read_only: false
+      - type: volume
+        source: vea-php-fpm-local
+        target: /var/lib/php/
+        read_only: false
+      - type: bind
+        source: ./docker/dev/php-fpm/apcu.ini
+        target: /usr/local/etc/php/conf.d/apcu.ini
+        read_only: false
+      - type: bind
+        source: ./docker/dev/php-fpm/xdebug.ini
+        target: /usr/local/etc/php/conf.d/xdebug.ini
+        read_only: false
+      - type: bind
+        source: ./docker/dev/php-fpm/opcache.ini
+        target: /usr/local/etc/php/conf.d/opcache.ini
+        read_only: false
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: false
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "nc", "-zv", "${PHP_FPM_HOST}", "${PHP_FPM_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vea-network
+  nginx:
+    container_name: "vea-nginx"
+    restart: unless-stopped
+    tty: true
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - type: bind
+        source: .
+        target: /var/www/
+        read_only: false
+      - type: bind
+        source: ./conf.d/
+        target: /etc/nginx/conf.d/
+        read_only: true
+    depends_on: 
+      php-fpm:
+        condition: service_healthy
+    networks:
+      - vea-network
+  mysql:
+    container_name: vea-mysql
+    tty: true
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ALLOW_EMPTY_PASSWORD: ${MYSQL_ALLOW_EMPTY_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "${MYSQL_HOST}", "-p${MYSQL_PASSWORD}"]
+      interval: 5s
+      timeout: 20s
+      retries: 10
+    volumes:
+      - type: volume
+        source: vea-mysql-local
+        target: /var/lib/mysql/
+        read_only: false
+      - type: bind
+        source: ./database/seeds/
+        target: /database/
+        read_only: true
+    ports:
+      - 3306:3306
+    expose:
+      - 3306
+    networks:
+      - vea-network
+  adminer:
+    container_name: vea-adminer
+    restart: unless-stopped
+    tty: true
+    volumes: 
+      - type: volume
+        source: vea-adminer-local
+        target: /var/lib/adminer/
+        read_only: false
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - 8080:8080
+    networks:
+      - vea-network
+  redis:
+    container_name: vea-redis
+    image: redis:6.2.4-alpine
+    restart: unless-stopped
+    tty: true
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - type: bind
+        source: ./docker/dev/redis/conf/redis.conf
+        target: /usr/local/etc/redis/redis.conf
+        read_only: false
+      - type: volume
+        source: vea-redis-local
+        target: /var/lib/redis/
+        read_only: false
+    env_file:
+      - .env
+    environment:
+      REDIS_REPLICATION_MODE: master
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - 6379:6379
+    expose:
+      - 6379
+    networks:
+      - vea-network
+
+volumes:
+  vea-php-fpm-local:
+    driver: local
+  vea-adminer-local:
+    driver: local
+  vea-nginx-local:
+    driver: local
+  vea-mysql-local:
+    driver: local
+  vea-redis-local:
+    driver: local
+
+networks:
+  vea-network:
+    driver: bridge

@@ -1,0 +1,66 @@
+apiVersion: skaffold/v2beta16
+kind: Config
+
+# build:
+#   artifacts:
+#     - image: vea/nginx
+#       context: .
+#       docker:
+#         buildArgs:
+#           ENV: prod
+#         dockerfile: Dockerfile.nginx
+#       sync:
+#         manual:
+#           # - src: .
+#           #   dest: /var/www/
+#           - src: "config/**/*.conf"
+#             dest: /etc/nginx/conf.d
+
+# profiles:
+#   - name: dev
+#     activation:
+#       - command: dev
+#     build:
+#       artifacts:
+#         - image: vea/nginx
+#           context: .
+#           docker:
+#             buildArgs:
+#               ENV: dev
+#             dockerfile: Dockerfile.nginx
+#           sync:
+#             manual:
+#               - src: "docker/dev/web/default.conf"
+#                 dest: "/etc/nginx/conf.d/default.conf"
+#               - src: "docker/dev/web/templates/*.conf"
+#                 dest: "/etc/nginx/templates/"
+
+deploy:
+  kubectl:
+    flags:
+      global: [--namespace=vea-k8s-namespace]
+      disableValidation: false
+    manifests:
+      # - kubernetes/vea-k8s_nginx.yaml
+      # - kubernetes/vea-k8s_redis.yaml
+      - kubernetes/vea-k8s_adminer.yaml
+
+portForward:
+  # - resourceType: Service
+  #   resourceName: vea-k8s-nginx-service
+  #   localPort: 80
+  #   namespace: vea-k8s-namespace
+  #   address: 127.0.0.1
+  #   port: 80
+  # - resourceType: Service
+  #   resourceName: vea-k8s-redis-service
+  #   localPort: 6379
+  #   namespace: vea-k8s-namespace
+  #   address: 127.0.0.1
+  #   port: 6379
+  - resourceType: Service
+    resourceName: vea-k8s-adminer-service
+    namespace: vea-k8s-namespace
+    address: 127.0.0.1
+    port: 8080
+    localPort: 8080

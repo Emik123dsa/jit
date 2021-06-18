@@ -1,0 +1,99 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: vea-k8s-namespace
+  name: vea-k8s-config-map-redis
+data:
+  redis.conf: |
+    maxmemory 2mb
+    maxmemory-policy allkeys-lru
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: vea-k8s-namespace
+  name: vea-k8s-redis-service
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: vea-k8s-namespace
+  name: vea-k8s-redis
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  minReadySeconds: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      restartPolicy: Always
+      volumes:
+        - name: config
+          configMap:
+            name: vea-k8s-config-map-redis
+            items:
+              - key: redis.conf
+                path: redis.conf
+        - name: data
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Mi
+      containers:
+        - name: redis
+          tty: true
+          imagePullPolicy: Always
+          image: redis:6.2.4-alpine
+          terminationMessagePolicy: "File"
+          terminationMessagePath: /dev/termination-log
+          command: ["redis-server", "/tmp/redis.conf"]
+          volumeMounts:
+            - mountPath: /var/lib/redis/
+              name: data
+            - mountPath: /tmp
+              name: config
+              readOnly: true
+          env:
+            - name: REDIS_REPLICATION_MODE
+              value: master
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vea-k8s-secret
+                  key: REDIS_PASSWORD
+          ports:
+            - containerPort: 6379
+              name: "redis-db"
+              protocol: TCP
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: 400m
+            requests:
+              memory: 256Mi
+              cpu: 100m
+status: {}
+---
+
